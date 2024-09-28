@@ -1,0 +1,94 @@
+import os
+import torch
+import torch.nn as nn
+from torchvision import transforms
+from PIL import Image
+from fastapi import FastAPI, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+import io
+
+# SRVGGNetCompact model definition
+class SRVGGNetCompact(nn.Module):
+    def __init__(self, num_in_ch=3, num_out_ch=3, num_feat=64, num_conv=16, upscale=4, act_type='prelu'):
+        super(SRVGGNetCompact, self).__init__()
+        self.body = nn.ModuleList()
+        self.body.append(nn.Conv2d(num_in_ch, num_feat, 3, 1, 1))
+        
+        if act_type == 'relu':
+            activation = nn.ReLU(inplace=True)
+        elif act_type == 'prelu':
+            activation = nn.PReLU(num_parameters=num_feat)
+        elif act_type == 'leakyrelu':
+            activation = nn.LeakyReLU(negative_slope=0.1, inplace=True)
+        self.body.append(activation)
+        
+        for _ in range(num_conv):
+            self.body.append(nn.Conv2d(num_feat, num_feat, 3, 1, 1))
+            self.body.append(activation)
+        
+        self.body.append(nn.Conv2d(num_feat, num_out_ch * upscale * upscale, 3, 1, 1))
+        self.upsampler = nn.PixelShuffle(upscale)
+
+    def forward(self, x):
+        out = x
+        for layer in self.body:
+            out = layer(out)
+        out = self.upsampler(out)
+        base = torch.nn.functional.interpolate(x, scale_factor=4, mode='nearest')
+        return out + base
+
+# Load the saved model
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = SRVGGNetCompact().to(device)
+model.load_state_dict(torch.load('gandu7.pth', map_location=device))
+model.eval()
+
+# FastAPI App setup
+app = FastAPI()
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.post("/infer")
+async def infer(file: UploadFile = File(...)):
+    # Get the input image from the request
+    contents = await file.read()
+    input_image = preprocess_image(contents)
+
+    # Use the loaded model to generate the output image
+    with torch.no_grad():
+        output_tensor = model(input_image)
+
+    # Normalize the output tensor and convert it back to an image
+    output_tensor = torch.clamp(output_tensor, 0, 1)  # Ensure values are between 0 and 1
+    output_image = transforms.ToPILImage()(output_tensor.squeeze(0).cpu())
+
+    # Convert the output image to a BytesIO object
+    img_io = io.BytesIO()
+    output_image.save(img_io, 'PNG')
+    img_io.seek(0)
+
+    # Return the image as a StreamingResponse
+    return StreamingResponse(img_io, media_type="image/png")
+
+def preprocess_image(contents):
+    # Preprocess the input image
+    image = Image.open(io.BytesIO(contents)).convert('RGB')
+    transform = transforms.Compose([
+        transforms.Resize((128, 128)),  # Resize to match the model's expected input size
+        transforms.ToTensor()
+    ])
+
+    input_tensor = transform(image).unsqueeze(0).to(device)
+    return input_tensor
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

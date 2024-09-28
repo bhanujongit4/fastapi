@@ -6,7 +6,6 @@ from PIL import Image
 from flask import Flask, request, send_file
 from flask_cors import CORS
 import io
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 # SRVGGNetCompact model definition
 class SRVGGNetCompact(nn.Module):
@@ -39,17 +38,16 @@ class SRVGGNetCompact(nn.Module):
         return out + base
 
 # Load the saved model
-device = torch.device('cpu')  # Force CPU usage for Vercel
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = SRVGGNetCompact().to(device)
-model.load_state_dict(torch.load('gandu6.pth', map_location=device))
+model.load_state_dict(torch.load('gandu7 (1).pth', map_location=device))
 model.eval()
 
 # Flask App setup
 app = Flask(__name__)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
-CORS(app)
+CORS(app, resources={r"/infer": {"origins": "http://localhost:3000"}})
 
-@app.route('/api/infer', methods=['POST'])
+@app.route('/infer', methods=['POST'])
 def infer():
     # Get the input image from the request
     file = request.files['image']
@@ -82,8 +80,5 @@ def preprocess_image(input_file):
     input_tensor = transform(image).unsqueeze(0).to(device)
     return input_tensor
 
-@app.route('/')
-def home():
-    return "Super Resolution API is running!"
-
-# Remove the if __name__ == '__main__': block for Vercel deployment
+if __name__ == '__main__':
+    app.run(debug=True)

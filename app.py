@@ -45,7 +45,7 @@ model.eval()
 
 # Flask App setup
 app = Flask(__name__)
-CORS(app, resources={r"/infer": {"origins": "*"}})
+CORS(app)
 
 @app.route('/infer', methods=['POST'])
 def infer():

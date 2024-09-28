@@ -79,6 +79,6 @@ def preprocess_image(input_file):
 
     input_tensor = transform(image).unsqueeze(0).to(device)
     return input_tensor
-
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)

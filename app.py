@@ -40,12 +40,12 @@ class SRVGGNetCompact(nn.Module):
 # Load the saved model
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = SRVGGNetCompact().to(device)
-model.load_state_dict(torch.load('gandu7.pth', map_location=device))
+model.load_state_dict(torch.load('GanUn.pth', map_location=device))
 model.eval()
 
 # Flask App setup
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/infer": {"origins": "http://localhost:3000"}})
 
 @app.route('/infer', methods=['POST'])
 def infer():
@@ -79,6 +79,6 @@ def preprocess_image(input_file):
 
     input_tensor = transform(image).unsqueeze(0).to(device)
     return input_tensor
+
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True)

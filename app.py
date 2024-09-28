@@ -40,7 +40,7 @@ class SRVGGNetCompact(nn.Module):
 # Load the saved model
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = SRVGGNetCompact().to(device)
-model.load_state_dict(torch.load('gandu7 (1).pth', map_location=device))
+model.load_state_dict(torch.load('gandu7.pth', map_location=device))
 model.eval()
 
 # Flask App setup
